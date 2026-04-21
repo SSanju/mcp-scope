@@ -2,7 +2,7 @@
 
 **tcpdump for MCP.** A transparent JSON-RPC capture, viewer, and diff tool for the Model Context Protocol.
 
-> Status: pre-alpha. README-driven design — published to test the pitch before writing the code. Star or open an issue if you'd use this.
+> Status: pre-alpha. Core capture/view/stats/check/replay/diff/tui implemented. Open an issue if you'd use this.
 
 ---
 
@@ -41,15 +41,16 @@ Single static Go binary. No Node, no Python, no browser, no localhost port.
 
 ### Capture a session
 
-Wrap a stdio server:
+Wrap a stdio server — place `mcp-scope capture -o session.jsonl --` before the server command:
 ```sh
-mcp-scope capture --upstream "node build/index.js" -o session.jsonl
+mcp-scope capture -o session.jsonl -- node build/index.js
+mcp-scope capture -o session.jsonl -- python server.py --port 0
 ```
 
-Wrap an HTTP/SSE server:
+Wrap an HTTP/SSE server — point your client at the proxy, proxy forwards to upstream:
 ```sh
 mcp-scope capture --upstream https://my-server.internal/mcp --listen :8080 -o session.jsonl
-# then point your client at http://localhost:8080
+# then point your client at http://localhost:8080 instead of the real server
 ```
 
 Every JSON-RPC frame in either direction is timestamped and written to `session.jsonl`.
@@ -57,10 +58,14 @@ Every JSON-RPC frame in either direction is timestamped and written to `session.
 ### View a capture
 
 ```sh
+# Non-interactive — pipe-friendly, composable with grep/less
 mcp-scope view session.jsonl
-```
+mcp-scope view --kind req --method tools/call session.jsonl
+mcp-scope view --grep '"isError":true' -v session.jsonl
 
-Scrolling TUI. Filter by method, success/error, time range. Expand any frame to see the raw JSON-RPC.
+# Interactive TUI — scrollable two-pane explorer with live regex filter
+mcp-scope tui session.jsonl
+```
 
 ### Get a summary
 
@@ -69,34 +74,44 @@ mcp-scope stats session.jsonl
 ```
 
 ```
-METHOD                    COUNT   ERR%   p50      p95      p99
-initialize                1       0%     12ms     12ms     12ms
-tools/list                3       0%     8ms      14ms     14ms
-tools/call:read_file      47      0%     22ms     89ms     210ms
-tools/call:write_file     12      8%     45ms     180ms    340ms
-notifications/cancelled   2       —      —        —        —
+Requests:
+  method                                    count   errors      p50      p95      p99      max
+  tools/call                                   47        1     22ms     89ms    180ms    340ms
+  tools/list                                    3        0      8ms     14ms     14ms     14ms
+  initialize                                    1        0     12ms     12ms     12ms     12ms
+
+Notifications:
+  method                                    count
+  notifications/cancelled                       2
 ```
 
-### Diff two captures (v0.2)
+### Diff two captures
 
 ```sh
 mcp-scope diff baseline.jsonl candidate.jsonl
 ```
 
-Classifies every change between the two servers' declared capabilities:
+Schema-level diff. Extracts `tools/list`, `resources/list`, and `prompts/list` declarations
+from each capture and classifies every change:
 
 ```
-BREAKING  tools/call:write_file  required param "mode" added
-BREAKING  tools/call:delete_file removed
-SAFE      tools/call:read_file   optional param "encoding" added
-SAFE      tools/call:list_dir    new tool
-INFO      tools/call:read_file   description changed
+BREAKING  tools/call:write_file          required param "mode" added
+BREAKING  tools/call:delete_file         tool removed
+SAFE      tools/call:read_file.encoding  optional param added
+SAFE      tools/call:list_dir            new tool
+INFO      tools/call:read_file           description changed
 ```
 
 Exit code `1` if any breaking change is found — drop into CI to gate server upgrades:
 
 ```yaml
-- run: mcp-scope diff baseline.jsonl <(mcp-scope capture-once --upstream ./server)
+- run: mcp-scope diff baseline.jsonl candidate.jsonl
+```
+
+Use `--frames` to compare raw frame sequences instead of schemas:
+
+```sh
+mcp-scope diff --frames session-a.jsonl session-b.jsonl
 ```
 
 ## How it compares
@@ -114,17 +129,18 @@ Every other tool in the ecosystem is *active* — you sit at the keyboard and dr
 
 ## Roadmap
 
-**MVP**
-- [ ] `capture` — stdio + SSE + streamable HTTP proxy
-- [ ] `view` — scrolling TUI viewer
-- [ ] `stats` — per-method latency and error summary
+**MVP** ✅
+- [x] `capture` — stdio + SSE + streamable HTTP proxy, `--redact` for secret scrubbing
+- [x] `view` — non-interactive pretty-printer with composable filter flags
+- [x] `tui` — interactive two-pane TUI explorer (bubbletea)
+- [x] `stats` — per-method latency (p50/p95/p99/max) and error summary
 
-**v0.2**
-- [ ] `diff` — schema diff between captures, breaking-change classifier, CI exit codes
+**v0.2** ✅
+- [x] `diff` — schema diff (tools/resources/prompts), breaking-change classifier, CI exit codes
+- [x] `check` — JSON-RPC protocol validator, CI exit codes
 
-**v0.3+ (only if pulled)**
-- [ ] `replay` — fire recorded calls at a different server for regression testing
-- [ ] `check` — explicit baseline contract gate
+**v0.3** ✅
+- [x] `replay` — fire recorded calls at a different server for regression testing
 
 ## Explicitly not building
 
