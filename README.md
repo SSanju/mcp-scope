@@ -190,4 +190,4 @@ Every other tool in the ecosystem is *active* — you sit at the keyboard and dr
 
 ## License
 
-MIT (planned).
+MIT.
