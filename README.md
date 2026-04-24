@@ -2,7 +2,9 @@
 
 **tcpdump for MCP.** A transparent JSON-RPC capture, viewer, and diff tool for the Model Context Protocol.
 
-> Status: pre-alpha. Core capture/view/stats/check/replay/diff/tui implemented. Open an issue if you'd use this.
+![mcp-scope demo](demo.gif)
+
+> Status: v0.1.0. Core capture/view/stats/check/replay/diff/tui implemented. Open an issue if you'd use this.
 
 ---
 
@@ -29,10 +31,30 @@ The MCP debugging ecosystem is full of *interactive* tools — TUIs and web UIs 
 
 ## Install
 
+**macOS / Linux — download a pre-built binary:**
 ```sh
-# planned
+# macOS (Apple Silicon)
+curl -L https://github.com/SSanju/mcp-scope/releases/latest/download/mcp-scope_darwin_arm64.tar.gz | tar xz
+sudo mv mcp-scope /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/SSanju/mcp-scope/releases/latest/download/mcp-scope_darwin_amd64.tar.gz | tar xz
+sudo mv mcp-scope /usr/local/bin/
+
+# Linux (amd64)
+curl -L https://github.com/SSanju/mcp-scope/releases/latest/download/mcp-scope_linux_amd64.tar.gz | tar xz
+sudo mv mcp-scope /usr/local/bin/
+```
+
+**macOS — Homebrew tap** *(coming soon — tap repo being set up)*:
+```sh
+brew tap SSanju/mcp-scope
 brew install mcp-scope
-go install github.com/<org>/mcp-scope@latest
+```
+
+**Go install (requires Go 1.22+):**
+```sh
+go install github.com/SSanju/mcp-scope/cmd/mcp-scope@latest
 ```
 
 Single static Go binary. No Node, no Python, no browser, no localhost port.
@@ -63,6 +85,9 @@ mcp-scope view session.jsonl
 mcp-scope view --kind req --method tools/call session.jsonl
 mcp-scope view --grep '"isError":true' -v session.jsonl
 
+# Live tail — prints new frames as they arrive (like tail -f)
+mcp-scope view --follow session.jsonl
+
 # Interactive TUI — scrollable two-pane explorer with live regex filter
 mcp-scope tui session.jsonl
 ```
@@ -83,6 +108,15 @@ Requests:
 Notifications:
   method                                    count
   notifications/cancelled                       2
+
+Summary:
+  frames:       56
+  unmatched:    0 (requests without a response in capture)
+  sessions:     1
+  connects:     1
+  disconnects:  1
+  duration:     41m44s
+  transports:   stdio=56
 ```
 
 ### Diff two captures
@@ -152,7 +186,7 @@ Every other tool in the ecosystem is *active* — you sit at the keyboard and dr
 
 ## Contributing
 
-Pre-alpha. Open an issue describing your use case before sending a PR — the scope is deliberately narrow and the answer to most "could it also do X" questions is no.
+ Open an issue describing your use case before sending a PR — the scope is deliberately narrow and the answer to most "could it also do X" questions is no.
 
 ## License
 
