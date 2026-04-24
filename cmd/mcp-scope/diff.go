@@ -165,35 +165,40 @@ Flags:
 func extractSchema(grouped map[string][]requestPair) captureSchema {
 	var s captureSchema
 
-	if pairs := grouped["tools/list"]; len(pairs) > 0 && len(pairs[0].Response) > 0 {
+	// Use the last occurrence of each list response — covers reconnect scenarios
+	// where tools/list is called multiple times and only the final state matters.
+	if pairs := grouped["tools/list"]; len(pairs) > 0 {
+		last := pairs[len(pairs)-1]
 		var resp struct {
 			Result struct {
 				Tools []mcpTool `json:"tools"`
 			} `json:"result"`
 		}
-		if json.Unmarshal(pairs[0].Response, &resp) == nil {
+		if len(last.Response) > 0 && json.Unmarshal(last.Response, &resp) == nil {
 			s.Tools = resp.Result.Tools
 		}
 	}
 
-	if pairs := grouped["resources/list"]; len(pairs) > 0 && len(pairs[0].Response) > 0 {
+	if pairs := grouped["resources/list"]; len(pairs) > 0 {
+		last := pairs[len(pairs)-1]
 		var resp struct {
 			Result struct {
 				Resources []mcpResource `json:"resources"`
 			} `json:"result"`
 		}
-		if json.Unmarshal(pairs[0].Response, &resp) == nil {
+		if len(last.Response) > 0 && json.Unmarshal(last.Response, &resp) == nil {
 			s.Resources = resp.Result.Resources
 		}
 	}
 
-	if pairs := grouped["prompts/list"]; len(pairs) > 0 && len(pairs[0].Response) > 0 {
+	if pairs := grouped["prompts/list"]; len(pairs) > 0 {
+		last := pairs[len(pairs)-1]
 		var resp struct {
 			Result struct {
 				Prompts []mcpPrompt `json:"prompts"`
 			} `json:"result"`
 		}
-		if json.Unmarshal(pairs[0].Response, &resp) == nil {
+		if len(last.Response) > 0 && json.Unmarshal(last.Response, &resp) == nil {
 			s.Prompts = resp.Result.Prompts
 		}
 	}

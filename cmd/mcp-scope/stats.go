@@ -73,6 +73,7 @@ type statsResult struct {
 	FirstTS, LastTS time.Time
 	Connects        int
 	Disconnects     int
+	Sessions        int
 	TotalFrames     int
 	Unmatched       int
 }
@@ -99,6 +100,9 @@ func computeStats(r io.Reader) (*statsResult, error) {
 			switch rec.Event {
 			case "connect":
 				res.Connects++
+				res.Sessions++
+				res.Unmatched += len(pend) // orphans from the session that just ended
+				pend = map[string]pendingReq{} // reset at session boundary
 			case "disconnect":
 				res.Disconnects++
 			}
@@ -131,7 +135,7 @@ func computeStats(r io.Reader) (*statsResult, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-	res.Unmatched = len(pend)
+	res.Unmatched += len(pend)
 	return res, nil
 }
 
@@ -195,6 +199,7 @@ func writeStatsText(w io.Writer, res *statsResult) {
 	fmt.Fprintln(w, "\nSummary:")
 	fmt.Fprintf(w, "  frames:       %d\n", res.TotalFrames)
 	fmt.Fprintf(w, "  unmatched:    %d (requests without a response in capture)\n", res.Unmatched)
+	fmt.Fprintf(w, "  sessions:     %d\n", res.Sessions)
 	fmt.Fprintf(w, "  connects:     %d\n", res.Connects)
 	fmt.Fprintf(w, "  disconnects:  %d\n", res.Disconnects)
 	fmt.Fprintf(w, "  duration:     %s\n", fmtDur(res.LastTS.Sub(res.FirstTS)))

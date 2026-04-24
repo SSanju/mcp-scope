@@ -6,15 +6,36 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/SSanju/mcp-scope/internal/capture"
 )
 
+// tailReader wraps an *os.File and blocks on EOF instead of returning it,
+// enabling live-follow behaviour similar to `tail -f`.
+type tailReader struct{ f *os.File }
+
+func (t *tailReader) Read(p []byte) (int, error) {
+	for {
+		n, err := t.f.Read(p)
+		if n > 0 {
+			return n, nil
+		}
+		if err == io.EOF {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		return n, err
+	}
+}
+
 func runView(args []string) int {
 	fs := flag.NewFlagSet("view", flag.ContinueOnError)
 	verbose := fs.Bool("v", false, "print full JSON payload after each frame")
+	follow := fs.Bool("follow", false, "watch file for new frames (like tail -f)")
 	filter := &filterArgs{}
 	filter.RegisterFlags(fs)
 	fs.Usage = func() {
@@ -46,7 +67,16 @@ Flags:
 	}
 	defer f.Close()
 
-	sc := capture.NewRecordScanner(f)
+	var sc *capture.RecordScanner
+	if *follow {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt)
+		go func() { <-sig; os.Exit(0) }()
+		sc = capture.NewRecordScanner(&tailReader{f})
+	} else {
+		sc = capture.NewRecordScanner(f)
+	}
+
 	for sc.Scan() {
 		rec := sc.Record()
 		if !filter.Allow(rec) {

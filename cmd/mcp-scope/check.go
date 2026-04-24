@@ -91,8 +91,15 @@ func checkScan(path string, r io.Reader, strict bool) checkReport {
 		}
 
 		if rec.IsEvent() {
-			if rec.Event == "invalid_line" {
+			switch rec.Event {
+			case "invalid_line":
 				rep.issue("error", line, ts, "invalid JSON: "+rec.Meta["err"])
+			case "connect":
+				// Flush unmatched requests from the previous session before resetting.
+				for id, reqLine := range pending {
+					rep.issue("warn", reqLine, "", fmt.Sprintf("session ended with unmatched request id=%s", id))
+				}
+				pending = map[string]int{}
 			}
 			continue
 		}

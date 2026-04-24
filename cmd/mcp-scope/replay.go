@@ -97,7 +97,26 @@ Flags:
 	if *upstream != "" {
 		sum = replayHTTP(pairs, *upstream, *timeout, *delay, *compare)
 	} else {
-		sum = replayStdio(pairs, serverCmd, *timeout, *delay, *compare)
+		// For stdio, always perform the MCP initialize handshake before replaying.
+		var initPair *requestPair
+		f2, err2 := os.Open(captureFile)
+		if err2 == nil {
+			if ip := loadRequestPairs(f2, "initialize"); len(ip) > 0 {
+				cp := ip[0]
+				initPair = &cp
+			}
+			f2.Close()
+		}
+		if initPair == nil {
+			cp := requestPair{
+				ID:     "0",
+				Method: "initialize",
+				Request: json.RawMessage(`{"jsonrpc":"2.0","id":0,"method":"initialize","params":` +
+					`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"mcp-scope","version":"0"}}}`),
+			}
+			initPair = &cp
+		}
+		sum = replayStdio(pairs, initPair, serverCmd, *timeout, *delay, *compare)
 	}
 
 	if *jsonOut {
@@ -117,6 +136,7 @@ Flags:
 func replayHTTP(pairs []requestPair, upstream string, timeout, delay time.Duration, compare bool) replaySummary {
 	client := &http.Client{Timeout: timeout}
 	sum := replaySummary{Total: len(pairs)}
+	var sessionID string // preserved across requests (Mcp-Session-Id)
 
 	for _, pair := range pairs {
 		if delay > 0 {
@@ -134,6 +154,9 @@ func replayHTTP(pairs []requestPair, upstream string, timeout, delay time.Durati
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if sessionID != "" {
+			req.Header.Set("Mcp-Session-Id", sessionID)
+		}
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -145,6 +168,13 @@ func replayHTTP(pairs []requestPair, upstream string, timeout, delay time.Durati
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+
+		// Capture session ID from the first response that sets it.
+		if sessionID == "" {
+			if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
+				sessionID = sid
+			}
+		}
 
 		res.LatencyMS = float64(time.Since(start).Nanoseconds()) / 1e6
 		res.NewResp = json.RawMessage(bytes.TrimRight(body, "\n"))
@@ -167,7 +197,7 @@ func replayHTTP(pairs []requestPair, upstream string, timeout, delay time.Durati
 	return sum
 }
 
-func replayStdio(pairs []requestPair, cmd []string, timeout, delay time.Duration, compare bool) replaySummary {
+func replayStdio(pairs []requestPair, initPair *requestPair, cmd []string, timeout, delay time.Duration, compare bool) replaySummary {
 	sum := replaySummary{Total: len(pairs)}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -231,6 +261,31 @@ func replayStdio(pairs []requestPair, cmd []string, timeout, delay time.Duration
 			}
 		}
 	}()
+
+	// MCP handshake: send initialize + notifications/initialized before replaying.
+	// Skip if the first pair to replay is already initialize (full capture replay).
+	firstIsInit := len(pairs) > 0 && pairs[0].Method == "initialize"
+	if initPair != nil && !firstIsInit {
+		initCh := make(chan incoming, 1)
+		mu.Lock()
+		dispatch[initPair.ID] = initCh
+		mu.Unlock()
+		if _, err := stdin.Write(append(initPair.Request, '\n')); err == nil {
+			initTimer := time.NewTimer(timeout)
+			select {
+			case <-initCh:
+				initTimer.Stop()
+				_, _ = stdin.Write(append(
+					json.RawMessage(`{"jsonrpc":"2.0","method":"notifications/initialized"}`),
+					'\n',
+				))
+			case <-initTimer.C:
+			}
+		}
+		mu.Lock()
+		delete(dispatch, initPair.ID)
+		mu.Unlock()
+	}
 
 	for _, pair := range pairs {
 		if delay > 0 {
