@@ -32,6 +32,24 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+brews:
+  - name: mcp-scope
+    repository:
+      owner: SSanju
+      name: homebrew-mcp-scope
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/SSanju/mcp-scope"
+    description: "Transparent JSON-RPC capture, viewer, and diff tool for the Model Context Protocol"
+    license: "MIT"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    install: |
+      bin.install "mcp-scope"
+    test: |
+      assert_match "mcp-scope", shell_output("#{bin}/mcp-scope --help 2>&1", 2)
+
 release:
   github:
     owner: SSanju

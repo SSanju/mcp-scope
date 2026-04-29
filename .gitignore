@@ -28,3 +28,4 @@ go.work.sum
 
 # Local working notes (not for public repo)
 /Internal/
+/dist/

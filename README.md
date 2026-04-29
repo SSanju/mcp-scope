@@ -46,7 +46,7 @@ curl -L https://github.com/SSanju/mcp-scope/releases/latest/download/mcp-scope_l
 sudo mv mcp-scope /usr/local/bin/
 ```
 
-**macOS — Homebrew tap** *(coming soon — tap repo being set up)*:
+**macOS / Linux — Homebrew tap**:
 ```sh
 brew tap SSanju/mcp-scope
 brew install mcp-scope
