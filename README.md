@@ -1,33 +1,47 @@
 # mcp-scope
 
-**tcpdump for MCP.** A transparent JSON-RPC capture, viewer, and diff tool for the Model Context Protocol.
+Your MCP server works in Inspector. It fails silently in Claude Desktop, Cursor, or Gemini CLI.
+There are no logs. You can't reproduce it outside the real client. **mcp-scope shows you exactly what
+flowed on the wire — without changing the client or the server.**
+
+```
+┌──────────────┐    JSON-RPC    ┌────────────┐    JSON-RPC    ┌──────────────┐
+│  MCP client  │ ◄────────────► │ mcp-scope  │ ◄────────────► │  MCP server  │
+│ Claude/Cursor│                │  (proxy)   │                │  your server │
+└──────────────┘                └─────┬──────┘                └──────────────┘
+                                      │
+                                      ▼
+                                session.jsonl   ← every frame, timestamped
+```
+
+Prepend `mcp-scope capture --` to your server command. Keep using your real client normally.
+When something goes wrong, the capture has the answer.
 
 ![mcp-scope demo](demo.gif)
-
-> Status: v0.1.0. Core capture/view/stats/check/replay/diff/tui implemented. Open an issue if you'd use this.
 
 ---
 
 ## What it does
 
-`mcp-scope` sits between any MCP client (Claude Desktop, Cursor, Copilot, your own script) and any MCP server, silently records every JSON-RPC frame, and gives you the tools to inspect, summarise, and diff what happened.
+`mcp-scope` is a **passive proxy**: it sits between a real MCP client and server, records every
+JSON-RPC frame to a `.jsonl` file, and gives you six tools to answer every question that comes after:
 
-You don't change your client. You don't change your server. You prepend `mcp-scope capture --` and keep going.
-
-```
-┌──────────────┐    JSON-RPC    ┌────────────┐    JSON-RPC    ┌──────────────┐
-│  MCP client  │ ◄────────────► │ mcp-scope  │ ◄────────────► │  MCP server  │
-└──────────────┘                └─────┬──────┘                └──────────────┘
-                                      │
-                                      ▼
-                                session.jsonl
-```
+| Command | Question it answers |
+|---------|-------------------|
+| `view` | What exactly flowed on the wire? What was in that frame? |
+| `stats` | Which methods are slow? Where are errors coming from? |
+| `check` | Is this server speaking valid JSON-RPC? Will it break clients? |
+| `diff` | Did my server's tool schemas change between versions? Is any change breaking? |
+| `replay` | Does the new server version behave the same as the old one? |
+| `tui` | Let me explore this interactively with live filtering. |
 
 ## Why it exists
 
-The MCP debugging ecosystem is full of *interactive* tools — TUIs and web UIs you drive yourself to call tools and watch responses. None of them help when the bug only reproduces inside Claude Desktop, Cursor, or your CI pipeline. You need to see what *actually* flowed on the wire during a real session.
+Every other MCP debugging tool is *active* — you sit at the keyboard and drive it. That works until
+the bug only reproduces inside Claude Desktop, a CI runner, or a real AI agent in flight. Then you're
+stuck.
 
-`mcp-scope` is passive. It captures real traffic from real clients. Then you analyse it offline.
+`mcp-scope` captures what *actually happened* in a real session. Then you analyse it offline at your own pace.
 
 ## Install
 
@@ -148,18 +162,25 @@ Use `--frames` to compare raw frame sequences instead of schemas:
 mcp-scope diff --frames session-a.jsonl session-b.jsonl
 ```
 
-## How it compares
+## When to use mcp-scope vs other tools
 
-| Tool | Category | What it does |
-|------|----------|--------------|
-| **mcp-scope** | Passive proxy | Records real traffic from real clients. Diffs captures. |
-| MCP Inspector (official) | Web debugger | You drive it to call tools. Browser-based. |
-| mcp-tui | TUI debugger | You drive it interactively in the terminal. |
-| par-mcp-inspector-tui | TUI debugger | You drive it; rich JSON-RPC pane. |
-| mcp-probe | TUI debugger + CI | You drive it; built-in record/replay inside its own session. |
-| mcptools (`f/mcptools`) | CLI client | One-shot tool calls from the shell. |
+| Situation | Use this |
+|-----------|----------|
+| "My server works in Inspector but fails in Claude Desktop" | **mcp-scope** — captures the real client session |
+| "I need to see what a Gemini CLI MCP call returns right now" | MCP Inspector or mcptools |
+| "I want to interactively call my server's tools" | mcp-tui or mcp-probe |
+| "I shipped a new server version — did anything break for clients?" | **mcp-scope diff** |
+| "My CI needs to block on protocol violations" | **mcp-scope check --strict** |
+| "I need to replay old traffic against a new server" | **mcp-scope replay** |
 
-Every other tool in the ecosystem is *active* — you sit at the keyboard and drive it. `mcp-scope` is the only one that watches an existing client/server pair without disturbing either side.
+See the [examples/](examples/) folder for step-by-step walkthroughs for Gemini CLI, Google ADK MCPToolset, mcp-toolbox, and CI/CD pipelines.
+
+## Examples
+
+- [`examples/mcp-toolbox/`](examples/mcp-toolbox/) — Capturing and validating a Google mcp-toolbox session; protocol bugs found with `check --strict`
+- [`examples/gemini-cli/`](examples/gemini-cli/) — Debugging a Gemini CLI MCP integration silently failing
+- [`examples/adk-mcptoolset/`](examples/adk-mcptoolset/) — Diagnosing a Google ADK MCPToolset agent making unexpected tool calls
+- [`examples/ci-github-actions/`](examples/ci-github-actions/) — Full CI workflow: protocol validation + breaking-change gate on every server push
 
 ## Roadmap
 
